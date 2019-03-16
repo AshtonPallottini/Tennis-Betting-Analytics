@@ -1,0 +1,180 @@
+---
+title: "Vegas Fooling 2"
+author: "Ashton Pallottini"
+date: "November 27, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+```
+
+##Linear Regressions on t2 Data Frame
+```{r}
+load("aggregated_mens.RData")#Load in data frame t2
+
+t2$Upset <- rep(0, dim(t2)[1]) #Initialize Upset value
+
+#Create Upset value equal to 1 if the larger odds (underdog) value won, 0 if the smaller odds value won, and NA if either avgW or avgL is NaN
+for(i in (1:dim(t2)[1])){
+  if(is.nan(t2$avgW[i]) == FALSE & is.nan(t2$avgL[i]) == FALSE){
+    if(t2$avgW[i] > t2$avgL[i]){
+      t2$Upset[i] <- 1
+    }
+  }
+  else{
+    t2$Upset[i] <- NA
+  }
+}
+
+
+t2$Best.of.3 <- rep(0,dim(t2)[1]) #Initialize Best.of.3 dummy variable
+
+#Gives values of 1 to matches that were best of 3
+for(i in (1:dim(t2)[1])){
+  if(t2$Best.of[i] == 3){
+    t2$Best.of.3[i] <- 1
+  }
+}
+
+t2.LW.Avg.Ratio <- rep(0, dim(t2)[1]) #Initialize LW.Avg.Ratio
+
+#Creates ratio of loser odds to winner odds if both avgW and avgL are not NaN and makes the value NA otherwise. Smaller values here are larger upsets.
+for(i in (1:dim(t2)[1])){
+  if(is.nan(t2$avgW[i]) == FALSE & is.nan(t2$avgL[i]) == FALSE){
+    t2$LW.Avg.Ratio[i] <- t2$avgL[i] / t2$avgW[i]
+  }
+  else{
+    t2$LW.Avg.Ratio[i] <- NA
+  }
+}
+
+```
+
+
+```{r}
+#Creates linear regression of Upset on which Series it is
+lm.series.upset <- lm(Upset ~ Series, data = t2)
+summary(lm.series.upset)
+
+#Creates linear regression of Upset on inside/outside
+lm.court.upset <- lm(Upset ~ Court, data = t2)
+summary(lm.court.upset)
+
+#Creates linear regression of Upset on surface type
+lm.surface.upset <- lm(Upset ~ Surface, data = t2)
+summary(lm.surface.upset)
+
+#Creates linear regression of Upset on best of 3 dummy variable
+lm.bestof3.upset <- lm(Upset ~ Best.of.3, data = t2)
+summary(lm.bestof3.upset)
+
+#Creates linear regression of Upset on what round it is
+lm.round.upset <- lm(Upset ~ Round, data = t2)
+summary(lm.round.upset)
+
+```
+
+
+```{r}
+#Creates multiple regresion of all independent variables used above
+lm.all.upset <- lm(Upset ~ Court + Series + Surface + Best.of.3 + Round, data = t2) 
+summary(lm.all.upset)
+```
+
+
+```{r}
+#Creates linear regression of LW.Avg.Ratio on which Series it is
+lm.series.LW.Avg.Ratio <- lm(LW.Avg.Ratio ~ Series, data = t2)
+summary(lm.series.LW.Avg.Ratio)
+
+#Creates linear regression of LW.Avg.Ratio on inside/outside
+lm.court.LW.Avg.Ratio <- lm(LW.Avg.Ratio ~ Court, data = t2)
+summary(lm.court.LW.Avg.Ratio)
+
+#Creates linear regression of LW.Avg.Ratio on which playing surface it is
+lm.surface.LW.Avg.Ratio <- lm(LW.Avg.Ratio ~ Surface, data = t2)
+summary(lm.surface.LW.Avg.Ratio)
+
+#Creates linear regression of LW.Avg.Ratio on best of 3 dummy variable
+lm.bestof3.LW.Avg.Ratio <- lm(LW.Avg.Ratio ~ Best.of.3, data = t2)
+summary(lm.bestof3.LW.Avg.Ratio)
+
+#Creates linear regression of LW.Avg.Ratio on which Round it is
+lm.round.LW.Avg.Ratio <- lm(LW.Avg.Ratio ~ Round, data = t2)
+summary(lm.round.LW.Avg.Ratio)
+```
+
+
+```{r}
+#Creates Multiple regression of LW.Avg.Ratio on which all of the above independent variable
+lm.all.LW.Avg.Ratio <- lm(LW.Avg.Ratio ~ Series + Court + Surface + Best.of.3 + Round, data = t2)
+summary(lm.all.LW.Avg.Ratio)
+```
+
+##Graphic Representations of Money Potential by Variable
+
+```{r}
+load("favorite.data.RData")#Load in data frame favorite_data
+```
+
+```{r}
+rd.mp.df <- favorite.data %>% group_by(Round) %>% summarize(Match.Count = length(Round), AvgF = mean(avgF), AvgU = mean(avgU), Upset.Occurred = sum(as.numeric(odds.upset)), Upset.Freq = Upset.Occurred/Match.Count, Money.Potential.F = (1 - Upset.Freq)*AvgF, Money.Potential.U = Upset.Freq*AvgU)
+rd.mp.df
+```
+
+```{r}
+#Plot of Money Potentials for betting on winners and losers by round
+round.mp.plot <- ggplot(rd.mp.df, aes(x = factor(Round, levels = c("Round Robin", "1st Round", "2nd Round", "3rd Round", "4th Round", "Quarterfinals", "Semifinals", "The Final")), y = Money.Potential.F)) + geom_point(size = rd.mp.df$Match.Count^(1/2)*.17) + geom_point(size = rd.mp.df$Match.Count^(1/2)*.17, aes(y = Money.Potential.U), color = "green") + labs(x = "Round", y = "Money Potential", title = "Money Potential of Betting by Round", subtitle = "Green for Underdogs, Black for Favorites", caption = "Potential Derived as Probability Times Average Odds") + geom_hline(yintercept = mean(c(rd.mp.df$Money.Potential.F, rd.mp.df$Money.Potential.U)), color = "red", linetype = "dashed") + geom_hline(yintercept = median(c(rd.mp.df$Money.Potential.F, rd.mp.df$Money.Potential.U)), color = "blue", linetype = "dashed") + geom_text(size = 2.3, y = 1.07, x = 8.35, label = "Mean", color = "red") + geom_text(size = 2.3, y = 1.01, x = 8.35, label = "Median", color = "blue")
+round.mp.plot
+```
+
+```{r}
+series.mp.df <- favorite.data %>% group_by(Series) %>% summarize(Match.Count = length(Series), AvgF = mean(avgF), AvgU = mean(avgU), Upset.Occurred = sum(as.numeric(odds.upset)), Upset.Freq = Upset.Occurred/Match.Count, Money.Potential.F = (1 - Upset.Freq)*AvgF, Money.Potential.U = Upset.Freq*AvgU)
+series.mp.df
+```
+
+```{r}
+#Plot of Money Potentials for betting on winners and losers by series
+series.mp.plot <- ggplot(series.mp.df, aes(x = Series, y = Money.Potential.F)) + geom_point(size = series.mp.df$Match.Count^(1/2)*.17) + geom_point(size = series.mp.df$Match.Count^(1/2)*.17, aes(y = Money.Potential.U), color = "green") + labs(x = "Series", y = "Money Potential", title = "Money Potential of Betting by Series", subtitle = "Green for Underdogs, Black for Favorites", caption = "Potential Derived as Probability Times Average Odds") + geom_hline(yintercept = mean(c(series.mp.df$Money.Potential.F, series.mp.df$Money.Potential.U)), color = "red", linetype = "dashed") + geom_hline(yintercept = median(c(series.mp.df$Money.Potential.F, series.mp.df$Money.Potential.U)), color = "blue", linetype = "dashed") + geom_text(size = 2.3, y = 1.08, x = 9.3, label = "Mean", color = "red") + geom_text(size = 2.3, y = .98, x = 9.3, label = "Median", color = "blue") + scale_x_discrete("Series", labels = c("GS", "Intl.", "Intl.G", "Masters", "Mast.Cup", "Intl.S", "ATP250", "ATP500", "Mast.1000")) + expand_limits(y = c(.5, 1.5))
+series.mp.plot
+```
+
+```{r}
+both.mp.df <- favorite.data %>% group_by(Series,Round) %>% summarize(Match.Count = length(Round), AvgF = mean(avgF), AvgU = mean(avgU), Upset.Occurred = sum(as.numeric(odds.upset)), Upset.Freq = Upset.Occurred/Match.Count, Money.Potential.F = (1 - Upset.Freq)*AvgF, Money.Potential.U = Upset.Freq*AvgU) 
+both.mp.df <- unite(both.mp.df, col = Series.Round, Series, Round, sep = "_")
+both.mp.df
+```
+
+```{r}
+both.mp.plot <- ggplot(both.mp.df, aes(x = Series.Round, y = Money.Potential.F)) + geom_point(size = both.mp.df$Match.Count^(.33)*.5) + geom_point(aes(y = Money.Potential.U), color = "green", size = both.mp.df$Match.Count^(.33)*.5) + labs(x = "Series.Round", y = "Money Potential", title = "Money Potential of Betting by Series and Round", subtitle = "Green for Underdogs, Black for Favorites", caption = "Potential Derived as Probability Times Average Odds") + geom_hline(yintercept = mean(c(both.mp.df$Money.Potential.F, both.mp.df$Money.Potential.U)), color = "red", linetype = "dashed") + geom_hline(yintercept = median(c(both.mp.df$Money.Potential.F, both.mp.df$Money.Potential.U)), color = "blue", linetype = "dashed") + geom_text(size = 2.25, y = 1.06, x = 50, label = "Mean", color = "red") + geom_text(size = 2.25, y = 1, x = 50.2, label = "Median", color = "blue")# + geom_hline(yintercept = 1.18)# + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+both.mp.plot
+```
+
+```{r}
+best.bets.df <- both.mp.df[both.mp.df$Money.Potential.F >= 1.18 | both.mp.df$Money.Potential.U >= 1.18,]
+best.bets.df <- separate(data = best.bets.df, col = Series.Round, into = c("Series", "Round"), sep = "_")
+best.bets.df
+
+money <- 10000
+for(i in (1:dim(favorite.data)[1])){
+  if(favorite.data[[i,4]] %in% best.bets.df[[1]] && favorite.data[[i,7]] %in% best.bets.df[[2]]){
+    if(favorite.data[[i,15]] == FALSE){
+      money <- money - 100
+    }
+    else{
+      money <- money + (100*(favorite.data[[i,45]]))
+    }
+  }
+}
+money
+```
+
